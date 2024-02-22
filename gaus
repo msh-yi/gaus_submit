@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+#Gaussian submit script 7/5/20
+
+from __future__ import print_function
+import sys
+import os
+import argparse
+import subprocess
+
+class SlurmJob(object):
+    def __init__(self,args):
+        # Check input actually exists
+        if not os.path.isfile(args.infile):
+            sys.exit('Could not find input file!')
+        
+        # Make sure we have the correct extension
+        infile = args.infile.split('.')
+        self.software = 'g16'    
+        self.name      = infile[0]
+        self.infile    = args.infile 
+        self.threads   = args.nthreads
+        self.memory    = args.memory
+        self.partition = args.partition
+        self.time      = args.time
+        self.script    = 'gaussian_'+self.name+'.sh'
+        self.submit = args.submit
+
+        # Test if the walltime is valid on the requested partitions 
+        partition = self.partition.split(',')
+        if (self.time > 672):
+            sys.exit("Walltime of %s hours too long! \n Exiting..." % self.time)
+        if (self.time > 168) and ('shared' in partition):
+            partition.remove('shared')
+        too_long = list(set(self.partition.split(',')).difference(partition))
+        if too_long:
+            self.partition = ','.join(partition) 
+            print("Wall time of %s h too long for '%s' partition(s)." % (self.time, ','.join(too_long)))
+            print("Modifying partition to: '%s'" % self.partition)
+
+
+    def write_slurm_script(self):
+        cwdir = os.path.getcwd()
+        with open(self.script,'w') as f:
+            f.write("#!/bin/bash\n")
+            f.write("#SBATCH --job-name="+self.name+"\n")
+            f.write("#SBATCH --nodes=1\n")
+            f.write("#SBATCH --cpus-per-task="+str(self.threads)+"\n")
+            f.write("#SBATCH --partition="+self.partition+"\n")
+            f.write("#SBATCH -t "+str(self.time).zfill(2)+":00:00\n")
+            f.write("#SBATCH --mem="+str(self.memory)+"gb\n")
+            f.write("#SBATCH --mail-type=END,FAIL")
+            f.write("\n")
+            with open(f"{cwdir}/gaus_template") as temp:
+                for line in temp:
+                    f.write(line)
+
+    def submit_slurm_script(self): 
+        if (args.submit):
+            if (subprocess.call(['sbatch',self.script]) == 0):
+                print(self.infile+' was submitted.\n'
+                    +'\tQueue: '+self.partition+'.\n'
+                    +'\tTime: '+str(self.time)+' hours.\n'
+                    +'\tCPUs: '+str(self.threads)+' CPUs.\n'
+                    +'\tMemory: '+str(self.memory)+' GB.\n')
+        else:
+            print(self.infile+' submit script created.\n'
+                    +'\tQueue: '+self.partition+'.\n'
+                    +'\tTime: '+str(self.time)+' hours.\n'
+                    +'\tCPUs: '+str(self.threads)+' CPUs.\n'
+                    +'\tMemory: '+str(self.memory)+' GB.\n')
+    
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Prepare Gaussian 16 submit script on FASRC cluster.')
+    parser.add_argument("infile", help="Gaussian 16 input file")
+    parser.add_argument("-n", "--nthreads",metavar='N', help="CPUs-per-node",type=int,default=16)
+    parser.add_argument("-m", "--memory",metavar='M', help="totla memory (GB)",type=int,default=128)
+    parser.add_argument("-p","--partition",metavar='P',help="partition",default="shared")
+    parser.add_argument("-t","--time",metavar='T',help="time (hours)",type=int,default=24)
+    parser.add_argument("-s","--submit",help="submit",action='store_false')
+    args = parser.parse_args()
+
+    slurmjob = SlurmJob(args)
+    slurmjob.write_slurm_script()
+    slurmjob.submit_slurm_script()

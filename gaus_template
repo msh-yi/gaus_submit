@@ -1,0 +1,47 @@
+
+job=${SLURM_JOB_NAME}
+job=$(echo ${job%%.*})
+
+# load Gaussian module
+module load gaussian
+
+# Creating local scratch folder for the user on the computing node. 
+#Set the scratchlocation variable to the location of the local scratch, e.g. /scratch or /localscratch 
+# need to create scratch directory during setup
+export scratchlocation=/n/holyscratch01/jacobsen_lab/$USER
+export tdir=$scratchlocation/${job}_$(date '+%Y-%m-%d')
+if [ -d $tdir ]
+then
+  rm -r $tdir
+fi
+mkdir $tdir
+
+cd $SLURM_SUBMIT_DIR
+# Copy only the necessary stuff in submit directory to scratch directory.
+cp $job.* $tdir/
+# temporarily, for external xtb runs
+chmod +x xtb.sh 2>/dev/null || :
+cp xtb.sh $tdir 2>/dev/null || :
+chmod +x orca.sh 2>/dev/null || :
+cp orca.sh $tdir 2>/dev/null || :
+
+# Creating nodefile in scratch
+#echo $SLURM_NODELIST > $tdir/$job.nodes
+
+# cd to scratch
+cd $tdir
+
+# Copy job and node info to beginning of outputfile
+echo "Job execution start: $(date)" >  $SLURM_SUBMIT_DIR/$job.out
+echo "Shared library path: $LD_LIBRARY_PATH" >>  $SLURM_SUBMIT_DIR/$job.out
+echo "Slurm Job ID is: ${SLURM_JOB_ID}" >>  $SLURM_SUBMIT_DIR/$job.out
+echo "Slurm Job name is: ${SLURM_JOB_NAME}" >>  $SLURM_SUBMIT_DIR/$job.out
+echo $SLURM_NODELIST >> $SLURM_SUBMIT_DIR/$job.out
+
+#Start Gaussian job
+g16 < $tdir/$job.gjf >> $SLURM_SUBMIT_DIR/$job.out
+
+# Copy important stuff back and tar (xyz files, GBW files etc.)
+cd $SLURM_SUBMIT_DIR
+tar -czf ./$job.tar.gz -C $tdir .
+rm -rf $tdir
