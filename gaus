@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 #Gaussian submit script 7/5/20
 
-from __future__ import print_function
 import sys
 import os
 import argparse
 import subprocess
+from pathlib import Path
 
 class SlurmJob(object):
     def __init__(self,args):
@@ -39,7 +39,7 @@ class SlurmJob(object):
 
 
     def write_slurm_script(self):
-        cwdir = os.path.getcwd()
+        home = str(Path.home())
         with open(self.script,'w') as f:
             f.write("#!/bin/bash\n")
             f.write("#SBATCH --job-name="+self.name+"\n")
@@ -50,7 +50,7 @@ class SlurmJob(object):
             f.write("#SBATCH --mem="+str(self.memory)+"gb\n")
             f.write("#SBATCH --mail-type=END,FAIL")
             f.write("\n")
-            with open(f"{cwdir}/gaus_template") as temp:
+            with open(f"{home}/bin/gaus_template") as temp:
                 for line in temp:
                     f.write(line)
 
